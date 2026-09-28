@@ -60,11 +60,38 @@ wire [23:0] SRAM_SNES_ADDR;
 
 assign IS_ROM = ~SNES_ROMSEL;
 
+/* SaveRAM decode. Stock, and it must stay stock in THIS core: the Cx4's own
+   MMIO window is !A22 & A[15:13]==011, so any SaveRAM window on the A22=0
+   side is a strict subset of it -- the read mux (main.v) gives cx4_enable
+   priority, while ROM_WE does not check it, so writes would land and reads
+   would not. base/address.v's high window is safe there only because base
+   has no Cx4 MMIO. This window is at A22=1 and cannot collide. */
 assign IS_SAVERAM = |SAVERAM_MASK & (~SNES_ADDR[23] & &SNES_ADDR[22:20] & ~SNES_ADDR[19] & ~SNES_ADDR[15]);
 
+/* ROM decode, selected by the MCU-detected MAPPER.
+   The 110 formula is taken from sd2snes_base/address.v, which is the
+   authority for mapper decode in this tree. Any mapper this core does not
+   recognise falls through to the stock LoROM branch, so an unmodified Cx4
+   image is unaffected. The firmware never selects mapper 2 for a Cx4 image
+   (src/smc.c), so there is no ExHiROM branch here.
+
+     001 (and default)  LoROM    masked,   reaches  4 MB
+     110                SO96     A15 split, unmasked, reaches 16 MB
+
+   110 carries no ROM_MASK in base either: 96 Mbit is 12 MB, not a power of
+   two, so it cannot be expressed as a bitmask AND. */
 assign SRAM_SNES_ADDR = IS_SAVERAM
                         ? (24'hE00000 | ({SNES_ADDR[19:16], SNES_ADDR[14:0]}
                          & SAVERAM_MASK))
+                        : (MAPPER == 3'b110)
+                        ? (SNES_ADDR[15]
+                           ? ({1'b0, SNES_ADDR[23:16], SNES_ADDR[14:0]})
+                           : ({2'b10,
+                               SNES_ADDR[23],
+                               SNES_ADDR[21:16],
+                               SNES_ADDR[14:0]}
+                             )
+                          )
                         : ({2'b00, SNES_ADDR[22:16], SNES_ADDR[14:0]}
                          & ROM_MASK);
 

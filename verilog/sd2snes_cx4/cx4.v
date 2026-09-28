@@ -32,7 +32,8 @@ module cx4(
   input BUS_RDY,
   output cx4_active,
   output [2:0] cx4_busy_out,
-  input speed
+  input speed,
+  input so96
 );
 
 reg [2:0] cx4_busy;
@@ -299,10 +300,18 @@ parameter ST_DMA_END   = 5'b10000;
 initial DMA_ST = ST_DMA_IDLE;
 
 reg [23:0] CACHE_SRC_ADDRr;
-wire [22:0] MAPPED_CACHE_SRC_ADDR = {CACHE_SRC_ADDRr[23:16],CACHE_SRC_ADDRr[14:0]};
+// ROM address of a DSP bus access. Stock: {A23..16, A14..0}, A15 ignored. SO96 (mapper 110): the
+// CPU's own map (address.v), so the DSP reaches all 12 MB -- upper halves bank x 32 KB, lower halves
+// of A22=1 banks the top 4 MB -- and a table the CPU reads at an address the DSP reads there too
+function [23:0] rom_addr;
+  input [23:0] a;
+  input wide;
+  rom_addr = (~wide | a[15]) ? {1'b0, a[23:16], a[14:0]} : {2'b10, a[23], a[21:16], a[14:0]};
+endfunction
+wire [23:0] MAPPED_CACHE_SRC_ADDR = rom_addr(CACHE_SRC_ADDRr, so96);
 reg [23:0] DMA_SRC_ADDRr;
-wire [22:0] MAPPED_DMA_SRC_ADDR = {DMA_SRC_ADDRr[23:16],DMA_SRC_ADDRr[14:0]};
-wire [22:0] MAPPED_CPU_BUS_ADDR;
+wire [23:0] MAPPED_DMA_SRC_ADDR = rom_addr(DMA_SRC_ADDRr, so96);
+wire [23:0] MAPPED_CPU_BUS_ADDR;
 
 assign BUS_ADDR =  cx4_busy[BUSY_CACHE] ? MAPPED_CACHE_SRC_ADDR
                  : cx4_busy[BUSY_DMA] ? MAPPED_DMA_SRC_ADDR
@@ -430,7 +439,7 @@ reg [23:0] cpu_busdata;
 reg [23:0] cpu_romdata;
 reg [23:0] cpu_ramdata;
 reg [23:0] cpu_busaddr;
-assign MAPPED_CPU_BUS_ADDR = {cpu_busaddr[23:16], cpu_busaddr[14:0]};
+assign MAPPED_CPU_BUS_ADDR = rom_addr(cpu_busaddr, so96);
 reg [23:0] cpu_romaddr;
 reg [23:0] cpu_ramaddr;
 reg [23:0] cpu_acch;
@@ -855,7 +864,8 @@ always @(posedge CLK) begin
         else BUSRD_STATE <= ST_BUSRD_WAIT;
       end
       ST_BUSRD_END: begin
-        if(~cpu_busaddr[22]) cpu_busdata <= BUS_DI;
+        // stock returns $00 for a data-bus read with A22 set; SO96 serves ROM there like everywhere else
+        if(~cpu_busaddr[22] | so96) cpu_busdata <= BUS_DI;
         else cpu_busdata <= 8'h00;
       end
     endcase

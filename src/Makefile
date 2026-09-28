@@ -163,6 +163,10 @@ CFLAGS += -O$(OPT)
 CFLAGS += $(CPUFLAGS) -nostartfiles
 #CFLAGS += -funsigned-char -funsigned-bitfields -fpack-struct -fshort-enums
 CFLAGS += -Wall -Wstrict-prototypes -Werror -Wno-strict-aliasing
+# -Wno-strict-aliasing only silences the warning; the optimisation stays on at
+# -Os. This codebase punts hardware registers through integer casts, so the
+# violations are real and modern GCC exploits them. Disable the optimisation.
+CFLAGS += -fno-strict-aliasing
 CFLAGS += -Wa,-adhlns=$(OBJDIR)/$(<:.c=.lst)
 CFLAGS += -I$(OBJDIR) -I$(CONFIG_ARCH)
 CFLAGS += $(patsubst %,-I%,$(EXTRAINCDIRS))

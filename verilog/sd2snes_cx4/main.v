@@ -454,7 +454,8 @@ cx4 snes_cx4 (
   .BUS_RDY(CX4_RDY),
   .cx4_active(cx4_active),
   .cx4_busy_out(cx4_busy),
-  .speed(dsp_feat[0])
+  .speed(dsp_feat[0]),
+  .so96(MAPPER == 3'b110)
 );
 
 reg pad_latch = 0;

@@ -134,10 +134,29 @@ void smc_id(snes_romprops_t* props, uint32_t file_offset) {
     case 0x20: /* LoROM */
       props->mapper_id = 1;
       /* Cx4 LoROM */
-      if (header->map == 0x20 && ext_coprocessor && header->carttype2 == 0x10) {
+      if (header->carttype2 == 0x10 && ext_coprocessor &&
+          (header->map == 0x20 || (file_handle.fsize - props->offset) >= 0xc00000)) {
+        /* A FastROM header (map 0x30) is accepted only for a 96 Mbit image, the
+           SO96 board's: the switch masks bit 4, so upstream's `map == 0x20` test
+           alone dropped those images out of Cx4 detection, and any smaller one
+           must stay as stock has it. */
         props->has_cx4 = 1;
         props->fpga_conf = FPGA_CX4;
         props->fpga_dspfeat = CFG.cx4_speed;
+        /* 96Mbit Cx4: the A15-split map, reaching 12 MB. Size is the only
+           discriminator available -- Cx4 detection keys on the map/chip/sub
+           bytes, so an image cannot ask for a mapper in its header. Measured
+           against the image proper, not the file, so a 512-byte copier header
+           cannot move the threshold.
+
+           There is deliberately no ExHiROM tier between 4 MB and 12 MB. A
+           Cx4-detectable image must carry a LoROM header at file $7FB0, so its
+           vectors are at $7FE0-$7FFF; mapper 2 would fetch the reset vector
+           from $00:FFFC -> file $40FFFC instead, four megabytes away, and the
+           console black-screens. */
+        if ((file_handle.fsize - props->offset) >= 0xc00000) {
+          props->mapper_id = 6;
+        }                         /* else stays 1: LoROM, 4 MB, stock */
       }
       /* DSP1/1B LoROM */
       else if ((header->map == 0x20 && header->carttype == 0x03) ||

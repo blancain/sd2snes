@@ -114,6 +114,11 @@ clk_test snes_clk_test (
 );
 
 
+/* Mapper selected by the MCU (FPGA_CMD_SETMAPPER, 0x30|n). This register and
+   the mcu_mapper output both existed already but nothing wrote or drove them,
+   so MAPPER was a constant and every decode using it folded away at synthesis
+   ("FF/Latch <MAPPER_SRAM_HI> has a constant value of 0 ... will be trimmed").
+   The command case and the driver below are ported from sd2snes_base. */
 reg [2:0] MAPPER_BUF;
 reg [23:0] ADDR_OUT_BUF;
 reg [10:0] DAC_ADDR_OUT_BUF;
@@ -169,6 +174,7 @@ initial begin
   DAC_ADDR_OUT_BUF = 0;
   MSU_ADDR_OUT_BUF = 0;
   SD_DMA_ENr = 0;
+  MAPPER_BUF = 1;
   SD_DMA_PARTIALr = 0;
 end
 
@@ -181,6 +187,8 @@ always @(posedge clk) begin
 
   if (cmd_ready) begin
     case (cmd_data[7:4])
+      4'h3: // select mapper
+        MAPPER_BUF <= cmd_data[2:0];
       4'h4: begin// SD DMA
         SD_DMA_ENr <= 1;
         SD_DMA_TGTr <= cmd_data[1:0];
@@ -467,6 +475,7 @@ assign msu_reset_out = MSU_RESET_OUT_BUF;
 assign msu_ptr_out = MSU_PTR_OUT_BUF;
 
 assign mcu_data_out = SD_DMA_STATUS ? SD_DMA_SRAM_DATA : MCU_DATA_OUT_BUF;
+assign mcu_mapper = MAPPER_BUF;
 assign rom_mask_out = ROM_MASK;
 assign saveram_mask_out = SAVERAM_MASK;
 
